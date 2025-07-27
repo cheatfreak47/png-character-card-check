@@ -1,13 +1,4 @@
-# PNG Character Card Check 1.0
-# ----------------------------
-# A quick and dirty tool that Checks .png files to see if they 
-# are Character Cards and renames them as .card.png if they are!
-# -
-# Arguments:
-#    <path> : path to scan
-#    --depth <value> : how many subdirectories deep to scan the folder (default 3)
-#    --dry-run : simulate the run but don't rename anything
-# ----------------------------
+# cardcheck/main.py
 import os
 import json
 import base64
@@ -23,7 +14,6 @@ try:
 except ImportError:
     sys.exit("Error: Pillow library required. Install with: pip install pillow")
 
-# Try to import tqdm, but provide fallback
 try:
     from tqdm import tqdm
     HAS_TQDM = True
@@ -43,7 +33,7 @@ except ImportError:
             item = next(self.iterable)
             self.count += 1
             if self.count % 10 == 0 or self.count == self.total:
-                print(f"\r{self.desc}: {self.count}/{self.total} files", end='', file=sys.stderr)
+                print(f"\r{self.desc}: {self.count}/{self.total}", end='', file=sys.stderr)
                 if self.count == self.total:
                     print("", file=sys.stderr)  # Newline when done
             return item
@@ -67,26 +57,27 @@ def is_character_card(png_path):
             while True:
                 length, chunk_type = struct.unpack('>I4s', f.read(8))
                 data = f.read(length)
-                f.read(4)  # Yeet the CRC
+                f.read(4)  # CRC
 
                 if chunk_type in [b'tEXt', b'zTXt', b'iTXt']:
                     decoded_data = data.lower()
                     if (b'chara' in decoded_data or
                         b'char_name' in decoded_data or
                         b'"name":' in decoded_data):
-                        if b'prompt' not in decoded_data:  # Final safety check
+                        if b'prompt' not in decoded_data:
                             return True
                 if length == 0:
                     break
-    except:
-        pass
+    except Exception:
+        return False
     return False
 
 def rename_cards(root_dir=".", max_depth=3, dry_run=False):
+    """Renames character cards with progress tracking and safety checks"""
     root_dir = os.path.abspath(root_dir)
     cards_renamed = 0
 
-    print(f"{'DRY RUN - ' if dry_run else ''}Scanning: {root_dir} (max depth: {max_depth})")
+    print(f"{'DRY RUN - ' if dry_run else ''}Scanning: {root_dir} (max depth: {max_depth})", file=sys.stderr)
     if not HAS_TQDM:
         print("(Install 'tqdm' with 'pip install tqdm' for better progress bars)", file=sys.stderr)
 
@@ -102,9 +93,14 @@ def rename_cards(root_dir=".", max_depth=3, dry_run=False):
             if f.lower().endswith('.png') and not f.lower().endswith('.card.png')
         )
 
-    # Use proper progress tracking based on availability
+    # Initialize progress tracker
     Progress = tqdm if HAS_TQDM else SimpleProgress
-    progress = Progress(all_files, desc="Scanning PNGs", total=len(all_files))
+    progress = Progress(
+        all_files,
+        desc="Scanning PNGs",
+        total=len(all_files),
+        file=sys.stderr if HAS_TQDM else None
+    )
 
     for filepath in progress:
         if not is_character_card(filepath):
@@ -128,39 +124,35 @@ def rename_cards(root_dir=".", max_depth=3, dry_run=False):
 
         action = "Would rename" if dry_run else "Renamed"
         msg = f"{action}: {filename[:20]}... → {new_name}"
-        (tqdm.write(msg) if HAS_TQDM else print(msg, file=sys.stderr))
+        print(msg, file=sys.stderr)
 
         if not dry_run:
             os.rename(filepath, new_path)
         cards_renamed += 1
 
+    # Final status
     if cards_renamed == 0:
         print("No cards found!", file=sys.stderr)
     elif dry_run:
         print(f"Dry run complete - would rename {cards_renamed} files", file=sys.stderr)
+    return cards_renamed
 
 def cli():
-    """Handles command-line interface"""
+    """Command-line interface entry point"""
     parser = argparse.ArgumentParser(
-        description='PNG Character Card checker/renamer'
-    )
-    parser.add_argument('path', nargs='?', default='.', help='Directory to scan')
-    parser.add_argument('--depth', type=int, default=3, help='Max folder depth')
-    parser.add_argument('--dry-run', action='store_true', help='Simulate without renaming')
-    args = parser.parse_args()
-
-    rename_cards(root_dir=args.path, max_depth=args.depth, dry_run=args.dry_run)
-
-if __name__ == "__main__":
-    cli()  # Allows both `python main.py` and `cardcheck` usage
-    parser = argparse.ArgumentParser(
-        description='Automatically rename character card PNGs\n'
-        'For best experience: pip install tqdm',
+        description='PNG Character Card checker/renamer',
         formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument('path', nargs='?', default='.', help='Root directory to scan')
-    parser.add_argument('--depth', type=int, default=3, help='Max folder depth')
+    parser.add_argument('path', nargs='?', default='.', help='Directory to scan')
+    parser.add_argument('--depth', type=int, default=3, help='Max folder depth (default: 3)')
     parser.add_argument('--dry-run', action='store_true', help='Simulate without renaming')
     args = parser.parse_args()
 
-    rename_cards(root_dir=args.path, max_depth=args.depth, dry_run=args.dry_run)
+    rename_cards(
+        root_dir=args.path,
+        max_depth=args.depth,
+        dry_run=args.dry_run
+    )
+
+if __name__ == "__main__":
+    cli()

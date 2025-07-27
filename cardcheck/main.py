@@ -139,7 +139,20 @@ def rename_cards(root_dir=".", max_depth=3, dry_run=False):
     elif dry_run:
         print(f"Dry run complete - would rename {cards_renamed} files", file=sys.stderr)
 
+def cli():
+    """Handles command-line interface"""
+    parser = argparse.ArgumentParser(
+        description='PNG Character Card checker/renamer'
+    )
+    parser.add_argument('path', nargs='?', default='.', help='Directory to scan')
+    parser.add_argument('--depth', type=int, default=3, help='Max folder depth')
+    parser.add_argument('--dry-run', action='store_true', help='Simulate without renaming')
+    args = parser.parse_args()
+
+    rename_cards(root_dir=args.path, max_depth=args.depth, dry_run=args.dry_run)
+
 if __name__ == "__main__":
+    cli()  # Allows both `python main.py` and `cardcheck` usage
     parser = argparse.ArgumentParser(
         description='Automatically rename character card PNGs\n'
         'For best experience: pip install tqdm',
